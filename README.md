@@ -64,3 +64,15 @@ Slack authentication is handled via OAuth
 The Slack bot must be invited to the target channel
 
 Designed with human-in-the-loop workflows in mind
+
+### Frontend (React + TypeScript)
+
+A simple web interface allows users to submit industrial incident descriptions.
+The frontend sends incidents to an n8n webhook, receives structured AI analysis,
+and displays the classification result in real time.
+
+Features:
+- Incident input form
+- Async request handling
+- AI-powered classification result display
+- Integration with Slack alerting workflow
