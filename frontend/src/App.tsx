@@ -34,7 +34,7 @@ export default function App() {
       const data = await res.json();
 
       // n8n response normalize
-      const parsed: IncidentResult = JSON.parse(data.output[0].content[0].text);
+      const parsed: IncidentResult = data;
 
       setResult(parsed);
     } catch (err) {
