@@ -32,11 +32,11 @@ export default function App() {
       }
 
       const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || "Unknown error");
+      }
 
-      // n8n response normalize
-      const parsed: IncidentResult = data;
-
-      setResult(parsed);
+      setResult(data.data);
     } catch (err) {
       console.error("Incident analysis failed:", err);
       alert("Incident analysis failed. Check n8n is running.");
