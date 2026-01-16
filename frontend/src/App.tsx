@@ -19,7 +19,7 @@ export default function App() {
 
       const API_URL = import.meta.env.VITE_API_URL;
 
-      const res = await fetch(`${API_URL}/webhook/incident`, {
+      const res = await fetch(`${API_URL}/incident-webhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: message, source: "ui" }),
