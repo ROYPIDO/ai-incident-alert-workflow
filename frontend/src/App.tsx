@@ -1,67 +1,216 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { useState } from "react";
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse
-) {
-  // CORS Ayarları (Frontend'in erişebilmesi için)
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+type IncidentResult = {
+  category: string;
+  severity: "Low" | "Medium" | "High";
+  action: string;
+};
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+export default function App() {
+  const [message, setMessage] = useState("");
+  const [result, setResult] = useState<IncidentResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
+  const analyzeIncident = async () => {
+    try {
+      setLoading(true);
+      setResult(null);
 
-  // Frontend'den gelen veri: { text: "...", source: "ui" }
-  const { text, source } = req.body || {};
+      const API_URL = import.meta.env.VITE_API_URL;
 
-  if (!text) {
-    return res.status(400).json({ error: "Missing text field" });
-  }
+      const res = await fetch(`${API_URL}/webhook/incident`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: message, source: "ui" }),
+      });
 
-  try {
-    // N8N Cloud Webhook URL'ini Environment Variable'dan alıyoruz
-    const n8nUrl = process.env.N8N_WEBHOOK_URL;
+      if (!res.ok) {
+        throw new Error(`HTTP error ${res.status}`);
+      }
 
-    if (!n8nUrl) {
-      throw new Error("N8N_WEBHOOK_URL is not defined in Vercel Environment Variables");
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || "Unknown error");
+      }
+
+      setResult(data.data);
+    } catch (err) {
+      console.error("Incident analysis failed:", err);
+      alert("Incident analysis failed. Check n8n is running.");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // n8n Cloud'a isteği iletiyoruz
-    const n8nResponse = await fetch(n8nUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text: text,
-        source: source || "ui"
-      }),
-    });
+  const severityMeta = {
+    High: {
+      color: "bg-red-100 text-red-800 border-red-300",
+      label: "🚨 Critical incident",
+      glow: "shadow-[0_0_20px_rgba(239,68,68,0.6)]",
+    },
+    Medium: {
+      color: "bg-orange-100 text-orange-800 border-orange-300",
+      label: "🟠 Moderate incident",
+      glow: "",
+    },
+    Low: {
+      color: "bg-green-100 text-green-800 border-green-300",
+      label: "🟢 Minor / informational",
+      glow: "",
+    },
+  };
 
-    if (!n8nResponse.ok) {
-      const errorText = await n8nResponse.text();
-      throw new Error(`n8n Error: ${n8nResponse.status} - ${errorText}`);
-    }
+  const exampleIncidents = {
+    Low: "Minor sensor warning displayed. No impact on production.",
+    Medium:
+      "Machine overheating warning detected. Production slowed but still running.",
+    High: "Emergency stop activated due to safety risk. Production line halted and technician required immediately.",
+  };
 
-    // n8n'den dönen cevabı al (Success, Category, Severity vs.)
-    const data = await n8nResponse.json();
+  return (
+    <div
+      className={`min-h-screen flex items-center justify-center p-6 transition-colors ${
+        darkMode
+          ? "bg-gradient-to-br from-slate-900 to-slate-800 text-white"
+          : "bg-gradient-to-br from-slate-100 via-gray-100 to-slate-200"
+      }`}
+    >
+      <div
+        className={`rounded-2xl p-8 w-full max-w-2xl transition-all ${
+          darkMode ? "bg-slate-900 shadow-xl" : "bg-white shadow-xl"
+        }`}
+      >
+        {/* Header */}
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h1 className="text-3xl font-bold mb-1">AI Incident Analyzer</h1>
+            <p
+              className={`text-sm ${
+                darkMode ? "text-slate-300" : "text-gray-600"
+              }`}
+            >
+              AI-powered industrial incident severity classification
+            </p>
+          </div>
 
-    // Frontend'e cevabı dön
-    return res.status(200).json(data);
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="text-sm px-3 py-1 rounded-full border hover:opacity-80 transition"
+          >
+            {darkMode ? "☀️ Light" : "🌙 Dark"}
+          </button>
+        </div>
 
-  } catch (error: any) {
-    console.error("Workflow Error:", error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message || "Internal Server Error" 
-    });
-  }
+        {/* Textarea */}
+        <textarea
+          className={`w-full rounded-xl p-4 mb-4 border
+              focus:ring-2 focus:ring-blue-400 focus:outline-none
+              text-sm shadow-inner
+              ${
+                darkMode
+                  ? "bg-slate-800 text-slate-100 border-slate-600"
+                  : "bg-white text-slate-900 border-gray-300"
+              }`}
+          rows={4}
+          placeholder="Describe the incident..."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+        />
+
+        {/* Quick examples */}
+        <div className="flex justify-center gap-3 flex-wrap mb-4">
+          <button
+            onClick={() => setMessage(exampleIncidents.Low)}
+            className="px-4 py-2 rounded-full text-sm font-semibold
+                       bg-green-100 text-green-800
+                       hover:bg-green-200 hover:scale-105
+                       transition transform shadow-sm"
+          >
+            🟢 Low example
+          </button>
+
+          <button
+            onClick={() => setMessage(exampleIncidents.Medium)}
+            className="px-4 py-2 rounded-full text-sm font-semibold
+                       bg-orange-100 text-orange-800
+                       hover:bg-orange-200 hover:scale-105
+                       transition transform shadow-sm"
+          >
+            🟠 Medium example
+          </button>
+
+          <button
+            onClick={() => setMessage(exampleIncidents.High)}
+            className="px-4 py-2 rounded-full text-sm font-semibold
+                       bg-red-100 text-red-800
+                       hover:bg-red-200 hover:scale-105
+                       transition transform shadow-sm"
+          >
+            🚨 High example
+          </button>
+        </div>
+
+        {/* Analyze button */}
+        <button
+          onClick={analyzeIncident}
+          disabled={loading || !message}
+          className="w-full bg-blue-600 hover:bg-blue-700
+                     text-white px-4 py-3 rounded-xl
+                     font-semibold transition
+                     shadow-md hover:shadow-lg
+                     disabled:opacity-50"
+        >
+          {loading ? "Analyzing..." : "Analyze Incident"}
+        </button>
+
+        {/* Spinner */}
+        {loading && (
+          <div className="flex justify-center mt-6">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+          </div>
+        )}
+
+        {/* Result */}
+        {result && (
+          <div
+            className={`mt-6 p-5 rounded-xl border
+                        animate-[fadeIn_0.4s_ease-out]
+                        ${severityMeta[result.severity].color}
+                        ${severityMeta[result.severity].glow}`}
+          >
+            <div className="font-semibold mb-2">
+              {severityMeta[result.severity].label}
+            </div>
+
+            <div className="mb-1">
+              <strong>Category:</strong> {result.category}
+            </div>
+
+            <div className="mb-2">
+              <strong>Severity:</strong>{" "}
+              <span className="font-bold">{result.severity}</span>
+            </div>
+
+            <div>
+              <strong>Suggested action:</strong>
+              <p className="mt-1">{result.action}</p>
+            </div>
+
+            {result.severity === "High" && (
+              <div className="mt-4 text-sm font-semibold text-red-700">
+                ✅ Slack alert sent to operations channel
+              </div>
+            )}
+          </div>
+        )}
+
+        {!result && !loading && (
+          <p className="text-xs text-gray-400 mt-2 italic text-center">
+            🤖 The AI is bored… give it an incident to analyze.
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
