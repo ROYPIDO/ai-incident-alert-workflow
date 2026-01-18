@@ -11,7 +11,7 @@ export default function App() {
   const [result, setResult] = useState<IncidentResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const EMERGENCY_PHONE = import.meta.env.VITE_EMERGENCY_PHONE || "1234567890";
+  const EMERGENCY_PHONE = import.meta.env.VITE_EMERGENCY_PHONE || "+33612380067";
 
   const analyzeIncident = async () => {
     try {
