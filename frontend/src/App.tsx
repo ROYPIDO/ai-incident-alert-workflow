@@ -11,6 +11,7 @@ export default function App() {
   const [result, setResult] = useState<IncidentResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const EMERGENCY_PHONE = import.meta.env.VITE_EMERGENCY_PHONE || "1234567890";
 
   const analyzeIncident = async () => {
     try {
@@ -198,8 +199,25 @@ export default function App() {
             </div>
 
             {result.severity === "High" && (
-              <div className="mt-4 text-sm font-semibold text-red-700">
-                ✅ Slack alert sent to operations channel
+              <div className="mt-4 flex flex-col gap-3">
+                <div className="text-sm font-semibold text-red-700">
+                  ✅ Slack alert sent to operations channel
+                </div>
+
+                <a
+                  href={`tel:${EMERGENCY_PHONE}`}
+                  className="w-full text-center bg-red-600 hover:bg-red-700
+                 text-white px-4 py-3 rounded-xl
+                 font-bold transition
+                 shadow-md hover:shadow-lg
+                 animate-pulse"
+                >
+                  📞 Emergency Call
+                </a>
+
+                <p className="text-xs text-red-700 text-center">
+                  Direct call to on-call technician
+                </p>
               </div>
             )}
           </div>
