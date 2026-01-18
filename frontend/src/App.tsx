@@ -67,18 +67,23 @@ export default function App() {
     Low: "Minor sensor warning displayed. No impact on production.",
     Medium:
       "Machine overheating warning detected. Production slowed but still running.",
-    High:
-      "Emergency stop activated due to safety risk. Production line halted and technician required immediately.",
+    High: "Emergency stop activated due to safety risk. Production line halted and technician required immediately.",
   };
 
   return (
     <div
-      className={`min-h-screen flex items-center justify-center px-4 transition-colors
-      ${
-        darkMode
-          ? "bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100"
-          : "bg-gradient-to-br from-slate-100 via-gray-100 to-slate-200 text-slate-900"
-      }`}
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "16px",
+        transition: "all 0.3s ease",
+        background: darkMode
+          ? "linear-gradient(to bottom right, #0f172a, #020617)"
+          : "linear-gradient(to bottom right, #f1f5f9, #e5e7eb)",
+        color: darkMode ? "#f8fafc" : "#020617",
+      }}
     >
       <div
         className={`w-full max-w-2xl rounded-3xl p-8 shadow-xl transition-colors
@@ -87,9 +92,7 @@ export default function App() {
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold mb-1">
-              AI Incident Analyzer
-            </h1>
+            <h1 className="text-3xl font-bold mb-1">AI Incident Analyzer</h1>
             <p className="text-sm opacity-70">
               Industrial automated classification system
             </p>
