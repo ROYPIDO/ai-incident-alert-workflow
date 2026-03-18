@@ -1,0 +1,193 @@
+{
+  "name": "AI Incident Classifier – Production",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incident",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-912, 176],
+      "id": "8084c8af-2648-4dbe-93db-7a1b8735afb4",
+      "name": "Webhook",
+      "webhookId": "402821f6-6b40-4c6d-a729-8cddb9bdaf00"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.0-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "=You are an industrial incident classification system.\n\nSEVERITY RULES (MANDATORY):\n- High:\n  - Production stopped\n  - Emergency stop activated\n  - Safety risk to operators\n  - Immediate technician or maintenance required\n- Medium:\n  - Production slowed\n  - Non-critical machine issue\n  - Maintenance can be planned\n- Low:\n  - No production impact\n  - No safety risk\n  - Informational only\n\nIMPORTANT: If production is stopped OR safety risk exists, severity MUST be \"High\".\n\nRespond ONLY with valid JSON. No markdown, no code blocks, no extra text:\n{\n  \"category\": \"...\",\n  \"severity\": \"Low | Medium | High\",\n  \"action\": \"...\"\n}\n\nIncident description:\n{{ $json.body.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [-720, 176],
+      "id": "846be888-e4ed-4e36-880b-82011591358f",
+      "name": "Message a model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "HXxcKn0kwFehhf9U",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract text from Gemini response\nconst raw = $json.text\n  || ($json.message && $json.message.content)\n  || $json.output\n  || \"\";\n\n// Find JSON block (handles markdown code blocks too)\nconst match = raw.match(/\\{[\\s\\S]*?\\}/);\n\nif (!match) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned unreadable format. Check n8n execution logs.\"\n  };\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(match[0]);\n} catch (e) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned malformed JSON.\"\n  };\n}\n\nconst validSeverities = [\"Low\", \"Medium\", \"High\"];\nconst severity = String(parsed.severity || \"\").trim();\n\nreturn {\n  success: true,\n  category: parsed.category || \"General\",\n  severity: validSeverities.includes(severity) ? severity : \"Low\",\n  action: parsed.action || \"No specific action recommended\"\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-352, 176],
+      "id": "1a265c31-4369-4268-b00c-ffce6c628493",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: $json.success, data: { category: $json.category, severity: $json.severity, action: $json.action } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [0, 0],
+      "id": "1a3c6518-da91-4a11-a439-fff81a40d367",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "37cf1591-bb60-40fc-9253-cf0143985870",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "High",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [-16, 176],
+      "id": "63b56aaf-4354-4dda-89dd-50c5c133db4a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "#incidents"
+        },
+        "text": "=🚨 HIGH SEVERITY INCIDENT\n\n*Category:* {{ $json.category }}\n*Severity:* {{ $json.severity }}\n*Action:* {{ $json.action }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [336, 160],
+      "id": "de9659fa-e5ae-4eb4-a1e8-f06acee76871",
+      "name": "Send a message",
+      "webhookId": "e44b6ff3-5af9-4278-ba13-481f0da68c65",
+      "credentials": {
+        "slackApi": {
+          "id": "W0rycJLvfOTbW3tf",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "85255efe9234d2bab61635db50f3fac2731ffbc903f9ecd18d13a3a40a834e70"
+  },
+  "id": "hIpUnlM0rD9h1GOb",
+  "tags": [
+    { "id": "b93HtI369asMQ2fj", "name": "ai" },
+    { "id": "JO5lP2W5ThWeyW5L", "name": "production" },
+    { "id": "EMpgFpiFHQNb1Nc1", "name": "incident" },
+    { "id": "o9bfnOSBRYYp49Qd", "name": "human-in-the-loop" }
+  ]
+}
