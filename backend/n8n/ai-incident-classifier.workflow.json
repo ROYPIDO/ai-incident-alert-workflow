@@ -50,7 +50,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const contentBlocks = $json.message?.content;\n\nconst textFromBlocks = Array.isArray(contentBlocks)\n  ? contentBlocks\n      .filter((block) => block?.type === \"text\" && typeof block.text === \"string\")\n      .map((block) => block.text.trim())\n      .filter(Boolean)\n      .join(\"\\n\")\n  : typeof contentBlocks === \"string\"\n    ? contentBlocks\n    : \"\";\n\nconst rawCandidates = [\n  typeof $json.text === \"string\" ? $json.text : \"\",\n  textFromBlocks,\n  typeof $json.output === \"string\" ? $json.output : \"\",\n  typeof $json.response?.generations?.[0]?.text === \"string\"\n    ? $json.response.generations[0].text\n    : \"\",\n];\n\nconst raw = rawCandidates.find((value) => value.trim()) || \"\";\n\nif (!raw) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned unreadable format. Check n8n execution logs.\",\n    shouldNotifySlack: false\n  };\n}\n\nconst fencedMatch = raw.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);\nconst jsonText = fencedMatch?.[1]?.trim() || raw.match(/\\{[\\s\\S]*\\}/)?.[0] || \"\";\n\nif (!jsonText) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned unreadable format. Check n8n execution logs.\",\n    shouldNotifySlack: false\n  };\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonText);\n} catch {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned malformed JSON.\",\n    shouldNotifySlack: false\n  };\n}\n\nconst severityRaw = String(parsed.severity || \"\")\n  .trim()\n  .toLowerCase()\n  .replace(/[^\\w]/g, \"\");\n\nconst severityMap = {\n  low: \"Low\",\n  medium: \"Medium\",\n  high: \"High\"\n};\n\nconst severity = severityMap[severityRaw] || \"Low\";\nconst category = String(parsed.category || \"General\").trim() || \"General\";\nconst action =\n  String(parsed.action || \"No specific action recommended\").trim() ||\n  \"No specific action recommended\";\n\nreturn {\n  success: true,\n  category,\n  severity,\n  action,\n  shouldNotifySlack: severity === \"High\"\n};"
+        "jsCode": "function isIncidentShape(value) {\n  return (\n    value &&\n    typeof value === \"object\" &&\n    !Array.isArray(value) &&\n    (\"severity\" in value || \"category\" in value || \"action\" in value)\n  );\n}\n\nfunction collectStrings(value, result = []) {\n  if (typeof value === \"string\") {\n    const trimmed = value.trim();\n    if (trimmed) result.push(trimmed);\n    return result;\n  }\n\n  if (Array.isArray(value)) {\n    for (const item of value) collectStrings(item, result);\n    return result;\n  }\n\n  if (value && typeof value === \"object\") {\n    for (const nested of Object.values(value)) collectStrings(nested, result);\n  }\n\n  return result;\n}\n\nfunction findIncidentObject(value) {\n  if (isIncidentShape(value)) return value;\n\n  if (Array.isArray(value)) {\n    for (const item of value) {\n      const found = findIncidentObject(item);\n      if (found) return found;\n    }\n    return null;\n  }\n\n  if (value && typeof value === \"object\") {\n    for (const nested of Object.values(value)) {\n      const found = findIncidentObject(nested);\n      if (found) return found;\n    }\n  }\n\n  return null;\n}\n\nconst directIncident = findIncidentObject($json);\nlet parsed = null;\n\nif (directIncident) {\n  parsed = directIncident;\n} else {\n  const rawCandidates = collectStrings($json);\n\n  for (const raw of rawCandidates) {\n    const fencedMatch = raw.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);\n    const jsonText = fencedMatch?.[1]?.trim() || raw.match(/\\{[\\s\\S]*\\}/)?.[0] || \"\";\n\n    if (!jsonText) continue;\n\n    try {\n      const candidate = JSON.parse(jsonText);\n      if (isIncidentShape(candidate)) {\n        parsed = candidate;\n        break;\n      }\n    } catch {}\n  }\n}\n\nif (!parsed) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned unreadable format. Check n8n execution logs.\",\n    shouldNotifySlack: false\n  };\n}\n\nconst severityRaw = String(parsed.severity || \"\")\n  .trim()\n  .toLowerCase()\n  .replace(/[^\\w]/g, \"\");\n\nconst severityMap = {\n  low: \"Low\",\n  medium: \"Medium\",\n  high: \"High\"\n};\n\nconst severity = severityMap[severityRaw] || \"Low\";\nconst category = String(parsed.category || \"General\").trim() || \"General\";\nconst action =\n  String(parsed.action || \"No specific action recommended\").trim() ||\n  \"No specific action recommended\";\n\nreturn {\n  success: true,\n  category,\n  severity,\n  action,\n  shouldNotifySlack: severity === \"High\"\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -153,6 +153,11 @@
       "main": [
         [
           {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "If",
             "type": "main",
             "index": 0
@@ -165,24 +170,6 @@
         [
           {
             "node": "Send a message",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond to Webhook",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send a message": {
-      "main": [
-        [
-          {
-            "node": "Respond to Webhook",
             "type": "main",
             "index": 0
           }
