@@ -6,10 +6,19 @@ type IncidentResult = {
   action: string;
 };
 
+function normalizeApiBaseUrl(rawUrl: string | undefined) {
+  return (rawUrl || "")
+    .trim()
+    .replace(/^VITE_API_URL=/, "")
+    .replace(/\/webhook\/incident\/?$/, "")
+    .replace(/\/$/, "");
+}
+
 export default function App() {
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<IncidentResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [darkMode, setDarkMode] = useState(false);
   const EMERGENCY_PHONE =
     import.meta.env.VITE_EMERGENCY_PHONE || "+33612380067";
@@ -18,10 +27,15 @@ export default function App() {
     try {
       setLoading(true);
       setResult(null);
+      setError("");
 
-      const API_URL = import.meta.env.VITE_API_URL;
+      const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
-      const res = await fetch(`${API_URL}/webhook/incident`, {
+      if (!apiBaseUrl) {
+        throw new Error("VITE_API_URL is missing in the frontend environment.");
+      }
+
+      const res = await fetch(`${apiBaseUrl}/webhook/incident`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: message, source: "ui" }),
@@ -39,7 +53,11 @@ export default function App() {
       setResult(data.data);
     } catch (err) {
       console.error("Incident analysis failed:", err);
-      alert("Incident analysis failed. Check n8n is running.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Incident analysis failed. Check n8n and frontend environment settings.",
+      );
     } finally {
       setLoading(false);
     }
@@ -161,6 +179,18 @@ export default function App() {
         >
           {loading ? "Analyzing…" : "Analyze Severity"}
         </button>
+
+        {error && (
+          <div
+            className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+              darkMode
+                ? "border-red-500/40 bg-red-950/40 text-red-100"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            {error}
+          </div>
+        )}
 
         {/* Result */}
         {result && (
