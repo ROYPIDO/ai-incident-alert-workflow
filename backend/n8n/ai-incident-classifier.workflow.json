@@ -19,9 +19,9 @@
       "parameters": {
         "modelId": {
           "__rl": true,
-          "value": "models/gemini-2.0-flash",
+          "value": "models/gemini-2.5-flash",
           "mode": "list",
-          "cachedResultName": "models/gemini-2.0-flash"
+          "cachedResultName": "models/gemini-2.5-flash"
         },
         "messages": {
           "values": [
@@ -38,6 +38,9 @@
       "position": [-720, 176],
       "id": "846be888-e4ed-4e36-880b-82011591358f",
       "name": "Message a model1",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 60000,
       "credentials": {
         "googlePalmApi": {
           "id": "HXxcKn0kwFehhf9U",
@@ -47,7 +50,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract text from Gemini response\nconst raw = $json.text\n  || ($json.message && $json.message.content)\n  || $json.output\n  || \"\";\n\n// Find JSON block (handles markdown code blocks too)\nconst match = raw.match(/\\{[\\s\\S]*?\\}/);\n\nif (!match) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned unreadable format. Check n8n execution logs.\"\n  };\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(match[0]);\n} catch (e) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned malformed JSON.\"\n  };\n}\n\nconst validSeverities = [\"Low\", \"Medium\", \"High\"];\nconst severity = String(parsed.severity || \"\").trim();\n\nreturn {\n  success: true,\n  category: parsed.category || \"General\",\n  severity: validSeverities.includes(severity) ? severity : \"Low\",\n  action: parsed.action || \"No specific action recommended\"\n};"
+        "jsCode": "const contentBlocks = $json.message?.content;\n\nconst textFromBlocks = Array.isArray(contentBlocks)\n  ? contentBlocks\n      .filter((block) => block?.type === \"text\" && typeof block.text === \"string\")\n      .map((block) => block.text.trim())\n      .filter(Boolean)\n      .join(\"\\n\")\n  : typeof contentBlocks === \"string\"\n    ? contentBlocks\n    : \"\";\n\nconst rawCandidates = [\n  typeof $json.text === \"string\" ? $json.text : \"\",\n  textFromBlocks,\n  typeof $json.output === \"string\" ? $json.output : \"\",\n  typeof $json.response?.generations?.[0]?.text === \"string\"\n    ? $json.response.generations[0].text\n    : \"\",\n];\n\nconst raw = rawCandidates.find((value) => value.trim()) || \"\";\n\nif (!raw) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned unreadable format. Check n8n execution logs.\",\n    shouldNotifySlack: false\n  };\n}\n\nconst fencedMatch = raw.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);\nconst jsonText = fencedMatch?.[1]?.trim() || raw.match(/\\{[\\s\\S]*\\}/)?.[0] || \"\";\n\nif (!jsonText) {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned unreadable format. Check n8n execution logs.\",\n    shouldNotifySlack: false\n  };\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonText);\n} catch {\n  return {\n    success: false,\n    category: \"Parse Error\",\n    severity: \"Low\",\n    action: \"AI returned malformed JSON.\",\n    shouldNotifySlack: false\n  };\n}\n\nconst severityRaw = String(parsed.severity || \"\")\n  .trim()\n  .toLowerCase()\n  .replace(/[^\\w]/g, \"\");\n\nconst severityMap = {\n  low: \"Low\",\n  medium: \"Medium\",\n  high: \"High\"\n};\n\nconst severity = severityMap[severityRaw] || \"Low\";\nconst category = String(parsed.category || \"General\").trim() || \"General\";\nconst action =\n  String(parsed.action || \"No specific action recommended\").trim() ||\n  \"No specific action recommended\";\n\nreturn {\n  success: true,\n  category,\n  severity,\n  action,\n  shouldNotifySlack: severity === \"High\"\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -78,11 +81,12 @@
           "conditions": [
             {
               "id": "37cf1591-bb60-40fc-9253-cf0143985870",
-              "leftValue": "={{ $json.severity }}",
-              "rightValue": "High",
+              "leftValue": "={{ $json.shouldNotifySlack }}",
+              "rightValue": true,
               "operator": {
-                "type": "string",
-                "operation": "equals"
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
               }
             }
           ],
@@ -149,11 +153,6 @@
       "main": [
         [
           {
-            "node": "Respond to Webhook",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "If",
             "type": "main",
             "index": 0
@@ -170,7 +169,24 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
